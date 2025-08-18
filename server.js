@@ -10,6 +10,9 @@ const { aiCODGenerator } = require('./aiCODGenerator');
 const { uploadToPlatform } = require('./uploadToPlatform');
 // const { runCode } = require('./runCode');
 const axios = require('axios');
+const { aiSolutionGenerator } = require('./aiSolutionGenerator');
+const bodyParser = require("body-parser");
+const { spawn } = require("child_process");
 
 
 app.use(cors());
@@ -31,6 +34,24 @@ app.post("/generate-cod-description", async (req, res) => {
         
     } catch (error) {
         console.error("Error in /generate-cod:", error);
+        return res.status(500).send({ error: "Internal server error." });
+    }
+});
+
+app.post("/generate-solution", async (req, res) => {
+    try {
+        await aiSolutionGenerator(req.body)
+            .then((response) => {
+                console.log(response);
+                res.status(200).send({ response });
+            })
+            .catch((error) => {
+                console.error("Error in /generate-solution:", error);
+                res.status(500).send({ error: "Internal server error." });
+            });
+        
+    } catch (error) {
+        console.error("Error in /generate-solution:", error);
         return res.status(500).send({ error: "Internal server error." });
     }
 });
@@ -59,6 +80,64 @@ app.post("/upload-to-platform", async (req, res) => {
             res.status(500).send({ error: "Internal server error." });
         });
 });
+
+app.post("/run-java", (req, res) => {
+  const { code, input } = req.body;
+  if (!code) return res.status(400).json({ error: "No code provided" });
+
+  // Extract public class name
+  const match = code.match(/public\s+class\s+(\w+)/);
+  if (!match) return res.status(400).json({ error: "No public class found" });
+
+  const className = match[1];
+//   const javaFile = path.join(__dirname, `${className}.java`);
+  const javaFile = path.join(__dirname, `Main.java`);
+
+  // Save code to file
+  fs.writeFileSync(javaFile, code);
+
+  // Compile step
+  const javac = spawn("javac", [javaFile]);
+
+  let compileError = "";
+  javac.stderr.on("data", (data) => {
+    compileError += data.toString();
+  });
+
+  javac.on("close", (compileCode) => {
+    if (compileCode !== 0) {
+      return res.json({ error: "Compilation Error", details: compileError.trim() });
+    }
+
+    // Run step
+    const java = spawn("java", ["-cp", __dirname, className]);
+
+    let output = "";
+    let runtimeError = "";
+
+    java.stdout.on("data", (data) => {
+      output += data.toString();
+    });
+
+    java.stderr.on("data", (data) => {
+      runtimeError += data.toString();
+    });
+
+    java.on("close", (exitCode) => {
+      if (exitCode !== 0) {
+        return res.json({ error: "Runtime Error", details: runtimeError.trim() });
+      }
+      res.json({ output: output.trim() });
+    });
+
+    // Feed multi-line input if provided
+    if (input) {
+      java.stdin.write(input + "\n");
+    }
+    java.stdin.end();
+  });
+});
+
 
 // app.post("/run-code",async (req, res) => {
 //     await runCode(req.body)
