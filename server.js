@@ -90,8 +90,7 @@ app.post("/run-java", (req, res) => {
   if (!match) return res.status(400).json({ error: "No public class found" });
 
   const className = match[1];
-//   const javaFile = path.join(__dirname, `${className}.java`);
-  const javaFile = path.join(__dirname, `Main.java`);
+  const javaFile = path.join(__dirname, `${className}.java`);
 
   // Save code to file
   fs.writeFileSync(javaFile, code);
@@ -109,7 +108,8 @@ app.post("/run-java", (req, res) => {
       return res.json({ error: "Compilation Error", details: compileError.trim() });
     }
 
-    // Run step
+    // Track start time
+    const startTime = process.hrtime.bigint(); // nanoseconds
     const java = spawn("java", ["-cp", __dirname, className]);
 
     let output = "";
@@ -124,13 +124,30 @@ app.post("/run-java", (req, res) => {
     });
 
     java.on("close", (exitCode) => {
+      const endTime = process.hrtime.bigint();
+      const timeMs = Number(endTime - startTime) / 1e6; // convert ns → ms
+
+      // Format values
+      const timeBytes = Math.round(timeMs); // int ms
+      const memBytes = Math.round(process.memoryUsage().rss / 1024); // KB
+
       if (exitCode !== 0) {
-        return res.json({ error: "Runtime Error", details: runtimeError.trim() });
+        return res.json({
+          error: "Runtime Error",
+          details: runtimeError.trim(),
+          memBytes,
+          timeBytes,
+        });
       }
-      res.json({ output: output.trim() });
+
+      res.json({
+        output: output.trim(),
+        memBytes,
+        timeBytes,
+      });
     });
 
-    // Feed multi-line input if provided
+    // Feed input if provided
     if (input) {
       java.stdin.write(input + "\n");
     }
