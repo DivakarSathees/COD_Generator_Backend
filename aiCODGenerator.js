@@ -53,17 +53,80 @@ exports.aiCODGenerator = async (req) => {
         let { difficulty_level, topic, code_snippet, prompt } = req;
 // console.log(code_snippet);
 
-        if(prompt) {
-            // if(code_snippet == 0 ) {
-                prompt += `. You are an AI that generates scenario-based programming questions in a structured JSON format. 
-When given an instruction, always output in the following structure:
+//         if(prompt) {
+//             // if(code_snippet == 0 ) {
+//                 prompt += `. You are an AI that generates scenario-based programming questions in a structured JSON format. 
+// When given an instruction, always output in the following structure:
 
-{
-  "question_data": "<p><strong>Title: ...</strong></p> ...",
-  "inputformat": "<p>...</p>",
-  "outputformat": "<p>...</p>",
-  "manual_difficulty": "Hard | Medium | Easy"
-}
+// {
+//   "question_data": "<p><strong>Title: ...</strong></p> ...",
+//   "inputformat": "<p>...</p>",
+//   "outputformat": "<p>...</p>",
+//   "manual_difficulty": "Hard | Medium | Easy"
+// }
+
+// The description should:
+// - Be scenario-based (real-world context).
+// - Include a Title.
+// - Include a Problem Description.
+// - Include a clear Question section.
+// - Specify Classes/Methods if needed.
+// - Follow HTML formatting for rich text.
+
+// Now generate based on the instruction:
+
+// Instruction: Generate a scenario-based programming description
+// `;
+//             // }
+//             // else {
+//             //     prompt = `Your task is to create ${question_count} ${difficulty_level}-level code snippet based MCQs on the topic - ${topic} with ${options_count} options for each question & a single correct answer.`;
+//             // }
+//         }
+
+if (prompt) {
+  prompt += `. You are an AI that generates scenario-based programming questions in a structured JSON format. 
+When given an instruction, always output in the following structure as a JSON array:
+
+[
+  {
+    "question_data": "<p><strong>Title: Employee Management</strong></p>
+<p>You are tasked with developing a Java program to manage employee records. The program should allow users to input the first name, last name, employee ID, and job title of an employee. Once the user inputs these details, the program should display the employee's information, including their full name, employee ID, and job title.</p>
+
+<p><strong>Requirements:</strong></p>
+
+<ul>
+  <li>Create a class <code>Person</code> with the following attributes:
+    <ul>
+      <li><code>firstName</code> - String</li>
+      <li><code>lastName</code> - String</li>
+    </ul>
+    This class serves as a base class for other classes and will be extended by the <code>Employee</code> class.
+  </li>
+  <li>Create a class <code>Employee</code> that extends the <code>Person</code> class:
+    <ul>
+      <li>Inherits attributes <code>firstName</code> and <code>lastName</code> from Person.</li>
+      <li>Has additional attributes:
+        <ul>
+          <li><code>employeeId</code> - int</li>
+          <li><code>jobTitle</code> - String</li>
+        </ul>
+      </li>
+      <li>Implement getters, setters, and constructors for all the above-mentioned attributes.</li>
+    </ul>
+  </li>
+  <li>Create a class named <code>Main</code> which contains the main method where program execution begins:
+    <ul>
+      <li>It prompts the user to input the details of an employee.</li>
+      <li>It creates an <code>Employee</code> object with the provided details.</li>
+      <li>It displays the employee's information using the getters implemented in the <code>Employee</code> class.</li>
+    </ul>
+  </li>
+</ul>",
+    "inputformat": "<p>The first line consists of a String that represents firstName.<br>The second line consists of a String that represents lastName.<br>The third line consists of an int that represents the employeeId.<br>The fourth line consists of a String that represents the jobTitle.</p>",
+    "outputformat": "<p>The output should display the employee details in the following format:<br>Employee details:<br><br>Name: &lt;firstName&gt; &lt;lastName&gt;, &lt;jobTitle&gt;<br><br>Employee ID: &lt;employeeId&gt;</p>",
+    "manual_difficulty": "Easy"
+  }
+]
 
 The description should:
 - Be scenario-based (real-world context).
@@ -73,21 +136,11 @@ The description should:
 - Specify Classes/Methods if needed.
 - Follow HTML formatting for rich text.
 
-Now generate based on the instruction:
-
-Instruction: Generate a scenario-based programming description
+Now generate a NEW question based on the user instruction, strictly following the same JSON structure.
 `;
-            // }
-            // else {
-            //     prompt = `Your task is to create ${question_count} ${difficulty_level}-level code snippet based MCQs on the topic - ${topic} with ${options_count} options for each question & a single correct answer.`;
-            // }
-        }
+}
 
-        // check diifficulty level by converting it to lower case == easy then add "the question should not be basic level" in prompt
-        // if(difficulty_level?.toLowerCase() != "easy") {
-        //     prompt += " The question should not be basic level.";
-        // }
-//         console.log(prompt);
+
 
         prompt += ` Please respond with the COD in the following strict JSON format as an array:
 [

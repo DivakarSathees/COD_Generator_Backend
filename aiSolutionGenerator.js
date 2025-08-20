@@ -58,7 +58,7 @@ Requirements:
 - The program must read dynamic user input from STDIN and print to STDOUT exactly as specified.
 - Do NOT include any placeholder text like "...", "your code here", etc.
 - Escape all newlines in JSON strings as \\n.
-- Produce 10 to 15 distinct sample input/output pairs that match the program's exact I/O format.
+- Produce 10 to 15 distinct sample input/output pairs that match the program's exact I/O format with weightage for each samples on total to 100 percentage.
 - Ensure the JSON is syntactically valid.
 
 Return JSON in this exact shape:
@@ -67,8 +67,8 @@ Return JSON in this exact shape:
     {
         "solution_data": "",
         "samples": [
-            { "input": "<sample stdin #1>", "output": "<expected stdout #1>", "difficulty": "<manual_difficulty- Easy | Medium | Hard>" },
-            { "input": "<sample stdin #2>", "output": "<expected stdout #2>", "difficulty": "<manual_difficulty- Easy | Medium | Hard>" }
+            { "input": "<sample stdin #1>", "output": "<expected stdout #1>", "difficulty": "<manual_difficulty- Easy | Medium | Hard>", "score": percentage_score_within_0_to_100 },
+            { "input": "<sample stdin #2>", "output": "<expected stdout #2>", "difficulty": "<manual_difficulty- Easy | Medium | Hard>", "score": percentage_score_within_0_to_100 },
             // Include between 10 and 15 total pairs
         ],
         "io_spec": {
