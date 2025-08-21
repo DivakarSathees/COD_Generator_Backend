@@ -58,7 +58,7 @@ Requirements:
 - The program must read dynamic user input from STDIN and print to STDOUT exactly as specified.
 - Do NOT include any placeholder text like "...", "your code here", etc.
 - Escape all newlines in JSON strings as \\n.
-- Produce 10 to 15 distinct sample input/output pairs that match the program's exact I/O format with weightage for each samples on total to 100 percentage.
+- Produce 10 to 15 distinct sample input/output pairs that match the program's exact I/O format with weightage for each samples on total to 100 percentage (Easy with low weightage, Medium with normal & Hard with High).
 - Ensure the JSON is syntactically valid.
 
 Return JSON in this exact shape:

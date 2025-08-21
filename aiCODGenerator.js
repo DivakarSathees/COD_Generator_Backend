@@ -149,6 +149,7 @@ Now generate a NEW question based on the user instruction, strictly following th
     "inputformat": "",
     "outputformat": "",
     "manual_difficulty": "Hard | Medium | Easy",
+    "language": "Java | Python | C++ | JavaScript | Go | Rust | C#",
   }
 ]
 
