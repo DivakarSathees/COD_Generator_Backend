@@ -12,7 +12,9 @@ const { uploadToPlatform } = require('./uploadToPlatform');
 const axios = require('axios');
 const { aiSolutionGenerator } = require('./aiSolutionGenerator');
 const bodyParser = require("body-parser");
-const { spawn } = require("child_process");
+// const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
+
 
 
 app.use(cors());
@@ -154,6 +156,79 @@ app.post("/run-java", (req, res) => {
     java.stdin.end();
   });
 });
+
+app.post("/run-csharp", (req, res) => {
+  const { code, input } = req.body;
+  if (!code) return res.status(400).json({ error: "No code provided" });
+
+  const projDir = path.join(__dirname, "csproj");
+  const projFile = path.join(projDir, "csproj.csproj");
+  const csFile = path.join(projDir, "Program.cs");
+
+  // Ensure project exists
+  if (!fs.existsSync(projFile)) {
+    // Create new console project
+    spawnSync("dotnet", ["new", "console", "-n", "csproj", "-o", projDir], {
+      stdio: "inherit"
+    });
+  }
+
+  // Overwrite Program.cs with user code
+  fs.writeFileSync(csFile, code);
+
+  // Start measuring time
+  const startTime = process.hrtime.bigint();
+
+  // Run project
+  // const run = spawn("dotnet", ["run", "--project", projDir]);
+  const run = spawn("dotnet", ["run", "--project", projDir, "-nowarn:CS8600"]);
+
+  let output = "";
+  let runtimeError = "";
+
+  run.stdout.on("data", (data) => {
+    output += data.toString();
+    output = output
+      .split("\n")
+      .filter(line => !line.includes("warning CS"))
+      .join("\n");
+  });
+
+  run.stderr.on("data", (data) => {
+    runtimeError += data.toString();
+  });
+
+  run.on("close", (exitCode) => {
+    const endTime = process.hrtime.bigint();
+    const timeMs = Number(endTime - startTime) / 1e6;
+
+    const timeBytes = Math.round(timeMs);
+    const memBytes = Math.round(process.memoryUsage().rss / 1024);
+
+    if (exitCode !== 0) {
+      return res.json({
+        error: "Runtime Error",
+        details: runtimeError.trim(),
+        memBytes,
+        timeBytes,
+      });
+    }
+
+    res.json({
+      output: output.trim(),
+      memBytes,
+      timeBytes,
+    });
+  });
+
+  // Pass input if provided
+  if (input) {
+    run.stdin.write(input + "\n");
+  }
+  run.stdin.end();
+});
+
+
 
 
 // app.post("/run-code",async (req, res) => {

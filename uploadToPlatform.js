@@ -43,7 +43,7 @@ exports.uploadToPlatform = async (req) => {
 //         question_editor_type: q.question_data.includes("$$$examly") ? 3 : 1,
 //     };
 
-    console.log(req.data);
+    // console.log(req.data);
     
 
     try {
@@ -73,7 +73,7 @@ exports.uploadToPlatform = async (req) => {
       // results.push({ question: q.question_data, status: "Failed", error: error.message });
     }
   // }
-  console.log(results);
+  // console.log(results);
   
 
   return results;
