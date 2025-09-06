@@ -47,7 +47,7 @@ function extractJSONArray(text) {
 
 exports.aiSolutionGenerator = async (req) => {
     try{
-        let { question_data, inputformat, outputformat, manual_difficulty } = req;
+        let { question_data, inputformat, outputformat, language,manual_difficulty } = req;
         console.log(question_data);
         
         let prompt = `You are an assistant that must return ONLY valid JSON (no Markdown, no code fences, no commentary).
@@ -82,6 +82,7 @@ Give solution for the following context:
 question_data: ${question_data}
 inputformat: ${inputformat}
 outputformat: ${outputformat}
+language: ${language ? language : 'Java'}
 
 Do not include any explanations, extra text, or markdown formatting — return only valid JSON.
 `

@@ -228,6 +228,77 @@ app.post("/run-csharp", (req, res) => {
   run.stdin.end();
 });
 
+app.post("/run-c", (req, res) => {
+  const { code, input } = req.body;
+  if (!code) return res.status(400).json({ error: "No code provided" });
+
+  const cFile = path.join(__dirname, "program.c");
+  const outFile = path.join(__dirname, "program.out");
+
+  // Save code to file
+  fs.writeFileSync(cFile, code);
+
+  // Compile with gcc
+  const gcc = spawn("gcc", [cFile, "-o", outFile]);
+
+  let compileError = "";
+  gcc.stderr.on("data", (data) => {
+    compileError += data.toString();
+  });
+
+  gcc.on("close", (compileCode) => {
+    if (compileCode !== 0) {
+      return res.json({ error: "Compilation Error", details: compileError.trim() });
+    }
+
+    // Track start time
+    const startTime = process.hrtime.bigint();
+
+    const run = spawn(outFile);
+
+    let output = "";
+    let runtimeError = "";
+
+    run.stdout.on("data", (data) => {
+      output += data.toString();
+    });
+
+    run.stderr.on("data", (data) => {
+      runtimeError += data.toString();
+    });
+
+    run.on("close", (exitCode) => {
+      const endTime = process.hrtime.bigint();
+      const timeMs = Number(endTime - startTime) / 1e6;
+
+      const timeBytes = Math.round(timeMs);
+      const memBytes = Math.round(process.memoryUsage().rss / 1024);
+
+      if (exitCode !== 0) {
+        return res.json({
+          error: "Runtime Error",
+          details: runtimeError.trim(),
+          memBytes,
+          timeBytes,
+        });
+      }
+
+      res.json({
+        output: output.trim(),
+        memBytes,
+        timeBytes,
+      });
+    });
+
+    // Pass input if provided
+    if (input) {
+      run.stdin.write(input + "\n");
+    }
+    run.stdin.end();
+  });
+});
+
+
 
 
 

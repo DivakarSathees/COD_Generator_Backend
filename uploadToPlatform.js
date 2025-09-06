@@ -70,7 +70,7 @@ exports.uploadToPlatform = async (req) => {
 
     } catch (error) {
       console.error(`Failed to upload:`, error.response?.data || error.message);
-      // results.push({ question: q.question_data, status: "Failed", error: error.message });
+      results.push({ question: q.question_data, status: "Failed", error: error.message });
     }
   // }
   // console.log(results);
