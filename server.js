@@ -19,6 +19,7 @@ const { spawn, spawnSync } = require("child_process");
 
 app.use(cors());
 app.use(express.json());
+
 app.use(express.urlencoded({ extended: true }));
 
 app.post("/generate-cod-description", async (req, res) => {
