@@ -14,6 +14,8 @@ const { aiSolutionGenerator } = require('./aiSolutionGenerator');
 const bodyParser = require("body-parser");
 // const { spawn } = require("child_process");
 const { spawn, spawnSync } = require("child_process");
+require('dotenv').config();
+const { MongoClient } = require('mongodb');
 
 
 
@@ -27,7 +29,7 @@ app.post("/generate-cod-description", async (req, res) => {
         // Your task is to create 10 easy-level scenario-based MCQs on the topic - dotnet webapi with 4 options for each question & a single correct answer & the question should not be basic level
         await aiCODGenerator(req.body)
             .then((response) => {
-                console.log(response[0]);
+                // console.log(response[0]);
                 res.status(200).send({ response });
             })
             .catch((error) => {
@@ -297,6 +299,51 @@ app.post("/run-c", (req, res) => {
     }
     run.stdin.end();
   });
+});
+
+// endpoint to get all sessions from MongoDB
+app.get("/sessions", async (req, res) => {
+    try {
+  const client = new MongoClient(process.env.MONGO_URI);
+  const dbName = "aiMemoryDB";
+  const collectionName = "conversations";
+  
+  async function connectDB() {
+    if (!client.topology || !client.topology.isConnected()) {
+      await client.connect();
+    }
+    return client.db(dbName).collection(collectionName);
+  }
+  const collection = await connectDB();
+  const sessions = await collection.distinct("sessionId");
+  res.json({ sessions });
+
+    } catch (error) {
+        console.error("Error in /sessions:", error);
+        return res.status(500).send({ error: "Internal server error." });
+    }
+});
+
+// endpoint to get all records of a session with role assistant from MongoDB
+app.get("/conversations/:sessionId", async (req, res) => {
+    try {
+  const client = new MongoClient(process.env.MONGO_URI);
+  const dbName = "aiMemoryDB";
+  const collectionName = "conversations";
+  const sessionId = req.params.sessionId; 
+  async function connectDB() {
+    if (!client.topology || !client.topology.isConnected()) {
+      await client.connect();
+    }
+    return client.db(dbName).collection(collectionName);
+  }
+  const collection = await connectDB();
+  const conversations = await collection.find({ sessionId, role: "assistant" }).toArray();
+  res.json({ conversations });
+    } catch (error) {
+        console.error("Error in /conversations/:sessionId:", error);
+        return res.status(500).send({ error: "Internal server error." });
+    }
 });
 
 

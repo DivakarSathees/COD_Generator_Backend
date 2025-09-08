@@ -1,6 +1,8 @@
 require('dotenv').config();
 const encoder = require('gpt-3-encoder');
 const { jsonrepair } = require("jsonrepair");
+const { MongoClient } = require("mongodb");
+const { v4: uuidv4 } = require("uuid");
 
 
 // Check number of tokens in the input prompt
@@ -16,6 +18,39 @@ const Groq = require("groq-sdk");
 const grop = new Groq({
     apiKey: process.env.GROQ_API_KEY,
 });
+
+const client = new MongoClient(process.env.MONGO_URI);
+const dbName = "aiMemoryDB";
+const collectionName = "conversations";
+
+async function connectDB() {
+  if (!client.topology || !client.topology.isConnected()) {
+    await client.connect();
+  }
+  return client.db(dbName).collection(collectionName);
+}
+
+
+// Save conversation turn
+async function saveConversation(sessionId, role, content) {
+  const collection = await connectDB();
+  await collection.insertOne({
+    sessionId,
+    role,
+    content,
+    timestamp: new Date(),
+  });
+}
+
+// Get conversation history
+async function getConversation(sessionId, limit = 10) {
+  const collection = await connectDB();
+  return await collection
+    .find({ sessionId })
+    .sort({ timestamp: 1 })
+    .limit(limit)
+    .toArray();
+}
 
 function extractJSONArray(text) {
     const startIndex = text.indexOf('[');
@@ -50,7 +85,18 @@ exports.aiCODGenerator = async (req) => {
         // const prompt = `Generate 5 multiple choice questions with 4 options each and the correct answer for the following text: "The quick brown fox jumps over the lazy dog."`;
         
         console.log(req);
-        let { difficulty_level, topic, code_snippet, prompt, format } = req;
+        // let { difficulty_level, topic, code_snippet, prompt, format } = req;
+        let { sessionId, prompt, format } = req;
+ let temp_prompt = prompt;
+    // Create new session if not provided
+    if (!sessionId) {
+      sessionId = uuidv4();
+    }
+
+    // Fetch history from DB
+    const history = await getConversation(sessionId);
+
+    
 // console.log(code_snippet);
 
 //         if(prompt) {
@@ -199,19 +245,29 @@ Do not include any explanations, extra text, or markdown formatting — return o
         if (tokenCount > 4096) {
             throw new Error("Input prompt exceeds maximum token limit.");
         }
+        const messages = [
+            { role: "system", content: "You are COD Problem generator" },
+            ...history.map((msg) => ({
+                role: msg.role,
+                content: msg.content,
+            })),
+            { role: "user", content: prompt },
+        ];
+console.log(messages);
 
         const response = await grop.chat.completions.create({
             // model: 'llama3-8b-8192', 
             model: 'llama-3.3-70b-versatile', 
             // model: 'gemma2-9b-it',  // or 'gpt-4' if using GPT-4
             // prompt: prompt,
-            messages: [
-                        { role: "system", content: "You are COD Problem generator"},
-                        {
-                            role: "user",
-                            content: prompt,
-                        },
-                    ],
+            messages,
+            // messages: [
+            //             { role: "system", content: "You are COD Problem generator"},
+            //             {
+            //                 role: "user",
+            //                 content: prompt,
+            //             },
+            //         ],
                 // "model": "gemma2-9b-it",
                 // "temperature": 1,
                 // "max_completion_tokens": 8192,
@@ -226,7 +282,8 @@ Do not include any explanations, extra text, or markdown formatting — return o
         // console.log(response.choices[0].message);
         const resultText = response.choices[0].message.content;
         console.log(resultText);
-        
+        await saveConversation(sessionId, "user", prompt);
+        await saveConversation(sessionId, "assistant", resultText);
 
         try {
             const jsonArrayText = extractJSONArray(resultText);
@@ -249,7 +306,8 @@ Do not include any explanations, extra text, or markdown formatting — return o
             //     }
             // });
 
-            return parsedJson;
+            // return parsedJson;
+            return{ sessionId, result: parsedJson };
         } catch (e) {
             console.error("Failed to parse JSON:", e);
             throw new Error("The AI response is not valid JSON.");
