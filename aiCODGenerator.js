@@ -257,7 +257,9 @@ console.log(messages);
 
         const response = await grop.chat.completions.create({
             // model: 'llama3-8b-8192', 
-            model: 'llama-3.3-70b-versatile', 
+            // model: 'llama-3.3-70b-versatile', 
+            model: 'meta-llama/llama-4-scout-17b-16e-instruct', 
+            
             // model: 'gemma2-9b-it',  // or 'gpt-4' if using GPT-4
             // prompt: prompt,
             messages,
