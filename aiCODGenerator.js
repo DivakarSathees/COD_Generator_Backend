@@ -22,29 +22,53 @@ const grop = new Groq({
 const client = new MongoClient(process.env.MONGO_URI);
 const dbName = "aiMemoryDB";
 const collectionName = "conversations";
+const sessionsCol = "sessions";
 
-async function connectDB() {
+
+async function connectDB(collectionName) {
   if (!client.topology || !client.topology.isConnected()) {
     await client.connect();
   }
   return client.db(dbName).collection(collectionName);
 }
 
+async function createSession(name) {
+  const sessions = await connectDB(sessionsCol);
+  const sessionId = uuidv4();
+  await sessions.insertOne({
+    _id: sessionId,
+    name,
+    createdAt: new Date(),
+    lastActive: new Date(),
+  });
+  return sessionId;
+}
+
+async function updateSessionActivity(sessionId) {
+  const sessions = await connectDB(sessionsCol);
+  await sessions.updateOne(
+    { _id: sessionId },
+    { $set: { lastActive: new Date() } }
+  );
+}
+
 
 // Save conversation turn
 async function saveConversation(sessionId, role, content) {
-  const collection = await connectDB();
+  const collection = await connectDB(collectionName);
   await collection.insertOne({
     sessionId,
     role,
     content,
     timestamp: new Date(),
   });
+  await updateSessionActivity(sessionId);
+
 }
 
 // Get conversation history
 async function getConversation(sessionId, limit = 10) {
-  const collection = await connectDB();
+  const collection = await connectDB(collectionName);
   return await collection
     .find({ sessionId })
     .sort({ timestamp: 1 })
@@ -84,13 +108,16 @@ exports.aiCODGenerator = async (req) => {
     try {
         // const prompt = `Generate 5 multiple choice questions with 4 options each and the correct answer for the following text: "The quick brown fox jumps over the lazy dog."`;
         
-        console.log(req);
+        // console.log(req);
         // let { difficulty_level, topic, code_snippet, prompt, format } = req;
-        let { sessionId, prompt, format } = req;
+        let { sessionId, prompt, format, language, topic, difficulty_level } = req;
+        console.log(topic);
+        
  let temp_prompt = prompt;
     // Create new session if not provided
     if (!sessionId) {
-      sessionId = uuidv4();
+      // sessionId = uuidv4();
+      sessionId = await createSession(language+" - "+topic);
     }
 
     // Fetch history from DB
@@ -128,8 +155,13 @@ exports.aiCODGenerator = async (req) => {
 //             //     prompt = `Your task is to create ${question_count} ${difficulty_level}-level code snippet based MCQs on the topic - ${topic} with ${options_count} options for each question & a single correct answer.`;
 //             // }
 //         }
+if(!prompt){
+  prompt = `Generate a scenario based ${difficulty_level} level ${language} programing description on ${topic}`
+} else{
 
-if (prompt) {
+}
+
+// if (prompt) {
 //   prompt += `. You are an AI that generates scenario-based programming questions in a structured JSON format. 
 // When given an instruction, always output in the following structure as a JSON array:
 
@@ -219,7 +251,7 @@ The description should:
 Now generate a NEW question based on the user instruction, strictly following the same JSON structure.
 `;
 
-}
+// }
 
 
 
@@ -253,7 +285,7 @@ Do not include any explanations, extra text, or markdown formatting — return o
             })),
             { role: "user", content: prompt },
         ];
-console.log(messages);
+// console.log(messages);
 
         const response = await grop.chat.completions.create({
             // model: 'llama3-8b-8192', 

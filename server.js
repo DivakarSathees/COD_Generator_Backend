@@ -757,7 +757,7 @@ app.get("/sessions", async (req, res) => {
     try {
   const client = new MongoClient(process.env.MONGO_URI);
   const dbName = "aiMemoryDB";
-  const collectionName = "conversations";
+  const collectionName = "sessions";
   
   async function connectDB() {
     if (!client.topology || !client.topology.isConnected()) {
@@ -766,7 +766,7 @@ app.get("/sessions", async (req, res) => {
     return client.db(dbName).collection(collectionName);
   }
   const collection = await connectDB();
-  const sessions = await collection.distinct("sessionId");
+  const sessions = await collection.find({}).toArray();
   res.json({ sessions });
 
     } catch (error) {
