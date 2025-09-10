@@ -496,76 +496,191 @@ app.post("/run-java", (req, res) => {
 });
 
 
+// app.post("/run-csharp", (req, res) => {
+//   const { code, input } = req.body;
+//   if (!code) return res.status(400).json({ error: "No code provided" });
+
+//   const projDir = path.join(__dirname, "csproj");
+//   const projFile = path.join(projDir, "csproj.csproj");
+//   const csFile = path.join(projDir, "Program.cs");
+
+//   // Ensure project exists
+//   if (!fs.existsSync(projFile)) {
+//     // Create new console project
+//     spawnSync("dotnet", ["new", "console", "-n", "csproj", "-o", projDir], {
+//       stdio: "inherit"
+//     });
+//   }
+
+//   // Overwrite Program.cs with user code
+//   fs.writeFileSync(csFile, code);
+
+//   // Start measuring time
+//   const startTime = process.hrtime.bigint();
+
+//   // Run project
+//   // const run = spawn("dotnet", ["run", "--project", projDir]);
+//   const run = spawn("dotnet", ["run", "--project", projDir, "-nowarn:CS8600"]);
+
+//   let output = "";
+//   let runtimeError = "";
+
+//   run.stdout.on("data", (data) => {
+//     output += data.toString();
+//     output = output
+//       .split("\n")
+//       .filter(line => !line.includes("warning CS"))
+//       .join("\n");
+//   });
+
+//   run.stderr.on("data", (data) => {
+//     runtimeError += data.toString();
+//   });
+
+//   run.on("close", (exitCode) => {
+//     const endTime = process.hrtime.bigint();
+//     const timeMs = Number(endTime - startTime) / 1e6;
+
+//     const timeBytes = Math.round(timeMs);
+//     const memBytes = Math.round(process.memoryUsage().rss / 1024);
+
+//     if (exitCode !== 0) {
+//       return res.json({
+//         error: "Runtime Error",
+//         details: runtimeError.trim(),
+//         memBytes,
+//         timeBytes,
+//       });
+//     }
+
+//     res.json({
+//       output: output.trim(),
+//       memBytes,
+//       timeBytes,
+//     });
+//   });
+
+//   // Pass input if provided
+//   if (input) {
+//     run.stdin.write(input + "\n");
+//   }
+//   run.stdin.end();
+// });
+
 app.post("/run-csharp", (req, res) => {
   const { code, input } = req.body;
   if (!code) return res.status(400).json({ error: "No code provided" });
 
-  const projDir = path.join(__dirname, "csproj");
-  const projFile = path.join(projDir, "csproj.csproj");
-  const csFile = path.join(projDir, "Program.cs");
+  // Hash code for cache dir
+  const hash = crypto.createHash("md5").update(code).digest("hex");
+  const cacheDir = path.join(__dirname, "csharp_cache", hash);
+  const projFile = path.join(cacheDir, "app.csproj");
+  const csFile = path.join(cacheDir, "Program.cs");
+  const dllFile = path.join(cacheDir, "bin", "Debug", "net6.0", "app.dll");
+
+  // Cleanup old cache (older than 1 day, or shorter for testing)
+  cleanupCache(path.join(__dirname, "csharp_cache"), CACHE_TTL_MS_SHORT);
+  console.log("Cache dir:", cacheDir);
+  console.log("Cache root contents:", fs.existsSync(path.join(__dirname, "csharp_cache")) ? fs.readdirSync(path.join(__dirname, "csharp_cache")) : "No cache root");
+
+  // Ensure cache dir exists
+  fs.mkdirSync(cacheDir, { recursive: true });
+
+  // Mark cache as recently used
+  touchCache(cacheDir);
 
   // Ensure project exists
   if (!fs.existsSync(projFile)) {
-    // Create new console project
-    spawnSync("dotnet", ["new", "console", "-n", "csproj", "-o", projDir], {
+    spawnSync("dotnet", ["new", "console", "-n", "app", "-o", cacheDir], {
       stdio: "inherit"
     });
   }
 
-  // Overwrite Program.cs with user code
+  // Write user code
   fs.writeFileSync(csFile, code);
 
-  // Start measuring time
-  const startTime = process.hrtime.bigint();
+  const compileStart = process.hrtime.bigint();
 
-  // Run project
-  // const run = spawn("dotnet", ["run", "--project", projDir]);
-  const run = spawn("dotnet", ["run", "--project", projDir, "-nowarn:CS8600"]);
+  // If DLL exists, skip compilation
+  if (fs.existsSync(dllFile)) {
+    runCSharp();
+  } else {
+    const build = spawn("dotnet", ["build", cacheDir, "-nowarn:CS8600"]);
 
-  let output = "";
-  let runtimeError = "";
+    let buildError = "";
+    build.stderr.on("data", (data) => {
+      buildError += data.toString();
+    });
 
-  run.stdout.on("data", (data) => {
-    output += data.toString();
-    output = output
-      .split("\n")
-      .filter(line => !line.includes("warning CS"))
-      .join("\n");
-  });
+    build.on("close", (buildCode) => {
+      const compileEnd = process.hrtime.bigint();
+      const compileTimeMs = Number(compileEnd - compileStart) / 1e6;
 
-  run.stderr.on("data", (data) => {
-    runtimeError += data.toString();
-  });
+      if (buildCode !== 0) {
+        return res.json({
+          error: "Compilation Error",
+          details: buildError.trim(),
+          compileTimeMs: Math.round(compileTimeMs),
+        });
+      }
 
-  run.on("close", (exitCode) => {
-    const endTime = process.hrtime.bigint();
-    const timeMs = Number(endTime - startTime) / 1e6;
+      runCSharp(Math.round(compileTimeMs));
+    });
+  }
 
-    const timeBytes = Math.round(timeMs);
-    const memBytes = Math.round(process.memoryUsage().rss / 1024);
+  function runCSharp(compileTimeMs = 0) {
+    const execStart = process.hrtime.bigint();
+    const run = spawn("dotnet", [dllFile]);
 
-    if (exitCode !== 0) {
-      return res.json({
-        error: "Runtime Error",
-        details: runtimeError.trim(),
+    let output = "";
+    let runtimeError = "";
+
+    run.stdout.on("data", (data) => {
+      output += data.toString();
+      // filter warnings
+      output = output
+        .split("\n")
+        .filter(line => !line.includes("warning CS"))
+        .join("\n");
+    });
+
+    run.stderr.on("data", (data) => {
+      runtimeError += data.toString();
+    });
+
+    run.on("close", (exitCode) => {
+      const execEnd = process.hrtime.bigint();
+      const execTimeMs = Number(execEnd - execStart) / 1e6;
+
+      const timeBytes = Math.round(execTimeMs);
+      const memBytes = Math.round(process.memoryUsage().rss / 1024);
+
+      if (exitCode !== 0) {
+        return res.json({
+          error: "Runtime Error",
+          details: runtimeError.trim(),
+          compileTimeMs,
+          execTimeMs: Math.round(execTimeMs),
+          memBytes,
+          timeBytes,
+        });
+      }
+
+      res.json({
+        output: output.trim(),
+        compileTimeMs,
+        execTimeMs: Math.round(execTimeMs),
         memBytes,
         timeBytes,
+        cached: fs.existsSync(dllFile), // show cache hit
       });
-    }
-
-    res.json({
-      output: output.trim(),
-      memBytes,
-      timeBytes,
     });
-  });
 
-  // Pass input if provided
-  if (input) {
-    run.stdin.write(input + "\n");
+    if (input) run.stdin.write(input + "\n");
+    run.stdin.end();
   }
-  run.stdin.end();
 });
+
 
 app.post("/run-c", (req, res) => {
   const { code, input } = req.body;
