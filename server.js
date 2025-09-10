@@ -249,11 +249,149 @@ app.post("/upload-to-platform", async (req, res) => {
 
 const crypto = require("crypto");
 
+// app.post("/run-java", (req, res) => {
+//   const { code, input } = req.body;
+//   if (!code) return res.status(400).json({ error: "No code provided" });
+
+//   // Extract public class name
+//   const match = code.match(/public\s+class\s+(\w+)/);
+//   if (!match) return res.status(400).json({ error: "No public class found" });
+
+//   const className = match[1];
+
+//   // Hash the code to identify cache
+//   const hash = crypto.createHash("md5").update(code).digest("hex");
+//   const cacheDir = path.join(__dirname, "java_cache", hash);
+//   const javaFile = path.join(cacheDir, `${className}.java`);
+//   const classFile = path.join(cacheDir, `${className}.class`);
+
+//   // Ensure cache directory exists
+//   fs.mkdirSync(cacheDir, { recursive: true });
+
+//   // Save code to file (overwrite if needed)
+//   fs.writeFileSync(javaFile, code);
+
+//   const compileStart = process.hrtime.bigint();
+
+//   // Check cache: if .class file exists, skip compilation
+//   if (fs.existsSync(classFile)) {
+//     runJava();
+//   } else {
+//     const javac = spawn("javac", [javaFile]);
+
+//     let compileError = "";
+
+//     javac.stderr.on("data", (data) => {
+//       compileError += data.toString();
+//     });
+
+//     javac.on("close", (compileCode) => {
+//       const compileEnd = process.hrtime.bigint();
+//       const compileTimeMs = Number(compileEnd - compileStart) / 1e6; // ms
+
+//       if (compileCode !== 0) {
+//         return res.json({
+//           error: "Compilation Error",
+//           details: compileError.trim(),
+//           compileTimeMs: Math.round(compileTimeMs),
+//         });
+//       }
+
+//       runJava(Math.round(compileTimeMs));
+//     });
+//   }
+
+//   function runJava(compileTimeMs = 0) {
+//     const execStart = process.hrtime.bigint();
+//     const java = spawn("java", ["-cp", cacheDir, className]);
+
+//     let output = "";
+//     let runtimeError = "";
+
+//     java.stdout.on("data", (data) => {
+//       output += data.toString();
+//     });
+
+//     java.stderr.on("data", (data) => {
+//       runtimeError += data.toString();
+//     });
+
+//     java.on("close", (exitCode) => {
+//       const execEnd = process.hrtime.bigint();
+//       const execTimeMs = Number(execEnd - execStart) / 1e6;
+
+//       const timeBytes = Math.round(execTimeMs); // ms
+//       const memBytes = Math.round(process.memoryUsage().rss / 1024); // KB
+
+//       if (exitCode !== 0) {
+//         return res.json({
+//           error: "Runtime Error",
+//           details: runtimeError.trim(),
+//           compileTimeMs,
+//           execTimeMs: Math.round(execTimeMs),
+//           memBytes,
+//           timeBytes,
+//         });
+//       }
+
+//       res.json({
+//         output: output.trim(),
+//         compileTimeMs,
+//         execTimeMs: Math.round(execTimeMs),
+//         memBytes,
+//         timeBytes,
+//         cached: fs.existsSync(classFile), // 👈 tells if cache was used
+//       });
+//     });
+
+//     if (input) {
+//       java.stdin.write(input + "\n");
+//     }
+//     java.stdin.end();
+//   }
+// });
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
+// give Cache a time to live of 2 minutes
+const CACHE_TTL_MS_SHORT = 2 * 60 * 1000; // 2 minutes
+
+// --- Cache helpers ---
+function cleanupCache(cacheRoot, maxAgeMs) {
+  if (!fs.existsSync(cacheRoot)) return;
+  const now = Date.now();
+
+  fs.readdirSync(cacheRoot).forEach(folder => {
+    const folderPath = path.join(cacheRoot, folder);
+    const lastUsedFile = path.join(folderPath, ".lastused");
+    console.log("Checking cache folder:", folderPath);
+    console.log("Last used file:", lastUsedFile);
+    
+
+    let lastUsed = 0;
+    if (fs.existsSync(lastUsedFile)) {
+      lastUsed = parseInt(fs.readFileSync(lastUsedFile, "utf8"), 10);
+    }
+    console.log("Last used timestamp:", lastUsed);
+    console.log("Current time:", now);
+    console.log("Max age (ms):", maxAgeMs);
+    console.log("Age (ms):", now - lastUsed);
+    
+    if (!lastUsed || now - lastUsed > maxAgeMs) {
+      console.log("🗑️ Cleaning old cache:", folderPath);
+      fs.rmSync(folderPath, { recursive: true, force: true });
+    }
+  });
+}
+
+function touchCache(folder) {
+  fs.writeFileSync(path.join(folder, ".lastused"), Date.now().toString());
+}
+
+// --- Java route ---
 app.post("/run-java", (req, res) => {
   const { code, input } = req.body;
   if (!code) return res.status(400).json({ error: "No code provided" });
 
-  // Extract public class name
   const match = code.match(/public\s+class\s+(\w+)/);
   if (!match) return res.status(400).json({ error: "No public class found" });
 
@@ -265,15 +403,23 @@ app.post("/run-java", (req, res) => {
   const javaFile = path.join(cacheDir, `${className}.java`);
   const classFile = path.join(cacheDir, `${className}.class`);
 
+  // Cleanup old cache (older than 1 day)
+  cleanupCache(path.join(__dirname, "java_cache"), CACHE_TTL_MS_SHORT);
+  console.log("Cache dir:", cacheDir);
+  // display all the files/folder under /usr/src/app/java_cache
+  console.log("Cache root contents:", fs.existsSync(path.join(__dirname, "java_cache")) ? fs.readdirSync(path.join(__dirname, "java_cache")) : "No cache root");
+  
   // Ensure cache directory exists
   fs.mkdirSync(cacheDir, { recursive: true });
 
-  // Save code to file (overwrite if needed)
+    // Touch cache to mark it as recently used
+  touchCache(cacheDir);
+  // Save code to file
   fs.writeFileSync(javaFile, code);
 
   const compileStart = process.hrtime.bigint();
 
-  // Check cache: if .class file exists, skip compilation
+  // Check cache: skip compilation if .class exists
   if (fs.existsSync(classFile)) {
     runJava();
   } else {
@@ -287,7 +433,7 @@ app.post("/run-java", (req, res) => {
 
     javac.on("close", (compileCode) => {
       const compileEnd = process.hrtime.bigint();
-      const compileTimeMs = Number(compileEnd - compileStart) / 1e6; // ms
+      const compileTimeMs = Number(compileEnd - compileStart) / 1e6;
 
       if (compileCode !== 0) {
         return res.json({
@@ -320,8 +466,8 @@ app.post("/run-java", (req, res) => {
       const execEnd = process.hrtime.bigint();
       const execTimeMs = Number(execEnd - execStart) / 1e6;
 
-      const timeBytes = Math.round(execTimeMs); // ms
-      const memBytes = Math.round(process.memoryUsage().rss / 1024); // KB
+      const timeBytes = Math.round(execTimeMs);
+      const memBytes = Math.round(process.memoryUsage().rss / 1024);
 
       if (exitCode !== 0) {
         return res.json({
@@ -340,13 +486,11 @@ app.post("/run-java", (req, res) => {
         execTimeMs: Math.round(execTimeMs),
         memBytes,
         timeBytes,
-        cached: fs.existsSync(classFile), // 👈 tells if cache was used
+        cached: fs.existsSync(classFile),
       });
     });
 
-    if (input) {
-      java.stdin.write(input + "\n");
-    }
+    if (input) java.stdin.write(input + "\n");
     java.stdin.end();
   }
 });
