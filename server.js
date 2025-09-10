@@ -86,6 +86,80 @@ app.post("/upload-to-platform", async (req, res) => {
         });
 });
 
+// app.post("/run-java", (req, res) => {
+//   const { code, input } = req.body;
+//   if (!code) return res.status(400).json({ error: "No code provided" });
+
+//   // Extract public class name
+//   const match = code.match(/public\s+class\s+(\w+)/);
+//   if (!match) return res.status(400).json({ error: "No public class found" });
+
+//   const className = match[1];
+//   const javaFile = path.join(__dirname, `${className}.java`);
+
+//   // Save code to file
+//   fs.writeFileSync(javaFile, code);
+
+//   // Compile step
+//   const javac = spawn("javac", [javaFile]);
+
+//   let compileError = "";
+//   javac.stderr.on("data", (data) => {
+//     compileError += data.toString();
+//   });
+
+//   javac.on("close", (compileCode) => {
+//     if (compileCode !== 0) {
+//       return res.json({ error: "Compilation Error", details: compileError.trim() });
+//     }
+
+//     // Track start time
+//     const startTime = process.hrtime.bigint(); // nanoseconds
+//     const java = spawn("java", ["-cp", __dirname, className]);
+
+//     let output = "";
+//     let runtimeError = "";
+
+//     java.stdout.on("data", (data) => {
+//       output += data.toString();
+//     });
+
+//     java.stderr.on("data", (data) => {
+//       runtimeError += data.toString();
+//     });
+
+//     java.on("close", (exitCode) => {
+//       const endTime = process.hrtime.bigint();
+//       const timeMs = Number(endTime - startTime) / 1e6; // convert ns → ms
+
+//       // Format values
+//       const timeBytes = Math.round(timeMs); // int ms
+//       const memBytes = Math.round(process.memoryUsage().rss / 1024); // KB
+
+//       if (exitCode !== 0) {
+//         return res.json({
+//           error: "Runtime Error",
+//           details: runtimeError.trim(),
+//           memBytes,
+//           timeBytes,
+//         });
+//       }
+
+//       res.json({
+//         output: output.trim(),
+//         memBytes,
+//         timeBytes,
+//       });
+//     });
+
+//     // Feed input if provided
+//     if (input) {
+//       java.stdin.write(input + "\n");
+//     }
+//     java.stdin.end();
+//   });
+// });
+
 app.post("/run-java", (req, res) => {
   const { code, input } = req.body;
   if (!code) return res.status(400).json({ error: "No code provided" });
@@ -100,21 +174,30 @@ app.post("/run-java", (req, res) => {
   // Save code to file
   fs.writeFileSync(javaFile, code);
 
-  // Compile step
+  // Track compile start
+  const compileStart = process.hrtime.bigint();
   const javac = spawn("javac", [javaFile]);
 
   let compileError = "";
+
   javac.stderr.on("data", (data) => {
     compileError += data.toString();
   });
 
   javac.on("close", (compileCode) => {
+    const compileEnd = process.hrtime.bigint();
+    const compileTimeMs = Number(compileEnd - compileStart) / 1e6; // ms
+
     if (compileCode !== 0) {
-      return res.json({ error: "Compilation Error", details: compileError.trim() });
+      return res.json({
+        error: "Compilation Error",
+        details: compileError.trim(),
+        compileTimeMs: Math.round(compileTimeMs),
+      });
     }
 
-    // Track start time
-    const startTime = process.hrtime.bigint(); // nanoseconds
+    // Execution step
+    const execStart = process.hrtime.bigint();
     const java = spawn("java", ["-cp", __dirname, className]);
 
     let output = "";
@@ -129,26 +212,29 @@ app.post("/run-java", (req, res) => {
     });
 
     java.on("close", (exitCode) => {
-      const endTime = process.hrtime.bigint();
-      const timeMs = Number(endTime - startTime) / 1e6; // convert ns → ms
-
-      // Format values
-      const timeBytes = Math.round(timeMs); // int ms
+      const execEnd = process.hrtime.bigint();
+      const execTimeMs = Number(execEnd - execStart) / 1e6;
+      
+      const timeBytes = Math.round(execTimeMs); // int ms
       const memBytes = Math.round(process.memoryUsage().rss / 1024); // KB
 
       if (exitCode !== 0) {
         return res.json({
           error: "Runtime Error",
           details: runtimeError.trim(),
+          compileTimeMs: Math.round(compileTimeMs),
+          execTimeMs: Math.round(execTimeMs),
           memBytes,
-          timeBytes,
+          timeBytes
         });
       }
 
       res.json({
         output: output.trim(),
+        compileTimeMs: Math.round(compileTimeMs),
+        execTimeMs: Math.round(execTimeMs),
         memBytes,
-        timeBytes,
+        timeBytes
       });
     });
 
@@ -159,6 +245,7 @@ app.post("/run-java", (req, res) => {
     java.stdin.end();
   });
 });
+
 
 app.post("/run-csharp", (req, res) => {
   const { code, input } = req.body;
