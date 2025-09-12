@@ -752,7 +752,117 @@ app.post("/run-c", (req, res) => {
   });
 });
 
+app.post("/run-python", (req, res) => {
+  const { code, input } = req.body;
+  if (!code) return res.status(400).json({ error: "No code provided" });
+  const pyFile = path.join(__dirname, "script.py");
+  fs.writeFileSync(pyFile, code);
+  const startTime = process.hrtime.bigint();
+  const py = spawn("python", [pyFile]);
+  let output = "";
+  let runtimeError = "";
+  py.stdout.on("data", (data) => {
+    output += data.toString();
+  });
+  py.stderr.on("data", (data) => {
+    runtimeError += data.toString();
+  });
+  py.on("close", (exitCode) => {
+    const endTime = process.hrtime.bigint();
+    const timeMs = Number(endTime - startTime) / 1e6;
+    const timeBytes = Math.round(timeMs);
+    const memBytes = Math.round(process.memoryUsage().rss / 1024);
+    if (exitCode !== 0) {
+      return res.json({
+        error: "Runtime Error",
+        details: runtimeError.trim(),
+        memBytes,
+        timeBytes,
+      });
+    }
+    res.json({
+      output: output.trim(),
+      memBytes,
+      timeBytes,
+    });
+  });
+  if (input) {
+    py.stdin.write(input + "\n");
+  }
+  py.stdin.end();
+});
+
+
 // endpoint to get all sessions from MongoDB
+
+// app.post("/run-python", (req, res) => {
+//   const { code, input } = req.body;
+//   if (!code) return res.status(400).json({ error: "No code provided" });
+
+//   // Hash the code for caching
+//   const hash = crypto.createHash("md5").update(code).digest("hex");
+//   const cacheDir = path.join(__dirname, "python_cache", hash);
+//   const scriptFile = path.join(cacheDir, "main.py");
+
+//   // Cleanup old cache
+//   cleanupCache(path.join(__dirname, "python_cache"), CACHE_TTL_MS_SHORT);
+
+//   // Ensure cache directory exists
+//   fs.mkdirSync(cacheDir, { recursive: true });
+
+//   // Touch cache folder
+//   touchCache(cacheDir);
+
+//   // Save code
+//   fs.writeFileSync(scriptFile, code);
+
+//   runPython();
+
+//   function runPython() {
+//     const execStart = process.hrtime.bigint();
+//     const py = spawn("python3", [scriptFile]);
+
+//     let output = "";
+//     let runtimeError = "";
+
+//     py.stdout.on("data", (data) => {
+//       output += data.toString();
+//     });
+
+//     py.stderr.on("data", (data) => {
+//       runtimeError += data.toString();
+//     });
+
+//     py.on("close", (exitCode) => {
+//       const execEnd = process.hrtime.bigint();
+//       const execTimeMs = Number(execEnd - execStart) / 1e6;
+
+//       const timeBytes = Math.round(execTimeMs);
+//       const memBytes = Math.round(process.memoryUsage().rss / 1024);
+
+//       if (exitCode !== 0) {
+//         return res.json({
+//           error: "Runtime Error",
+//           details: runtimeError.trim(),
+//           execTimeMs: Math.round(execTimeMs),
+//           memBytes,
+//           timeBytes,
+//         });
+//       }
+
+//       res.json({
+//         output: output.trim(),
+//         execTimeMs: Math.round(execTimeMs),
+//         memBytes,
+//         timeBytes,
+//       });
+//     });
+
+//     if (input) py.stdin.write(input + "\n");
+//     py.stdin.end();
+//   }
+// });
+
 app.get("/sessions", async (req, res) => {
     try {
   const client = new MongoClient(process.env.MONGO_URI);

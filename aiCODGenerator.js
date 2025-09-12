@@ -267,6 +267,7 @@ Now generate a NEW question based on the user instruction, strictly following th
 ]
 
 Do not include any explanations, extra text, or markdown formatting — return only valid JSON.
+Do not provide duplicate scenario based question sets. Each question must be unique and different from previous ones.
 `;
 
 
