@@ -21,12 +21,14 @@
 # Base Node image
 FROM node:18
 
-# Install OpenJDK and prerequisites
+# Install OpenJDK, Python and prerequisites
 RUN apt-get update && apt-get install -y \
     wget \
     apt-transport-https \
     software-properties-common \
     openjdk-17-jdk \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Set JAVA_HOME (optional)
