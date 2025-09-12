@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk \
     python3 \
     python3-pip \
+    && ln -s /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 # Set JAVA_HOME (optional)
